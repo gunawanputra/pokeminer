@@ -86,7 +86,7 @@ class Slave(threading.Thread):
         self.banned_count = 0
         self.error_code = None
         self.running = True
-        self.active = False
+        self.active = True
         center = self.points[0]
         self.api = PGoApi()
         self.api.activate_signature(config.ENCRYPT_PATH)
