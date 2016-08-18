@@ -44,9 +44,6 @@ local_data = threading.local()
 class MalformedResponse(Exception):
     """Raised when server response is malformed"""
 
-class BannedAccount(Exception):
-    """Raised when account is banned"""
-
 def configure_logger(filename='worker.log'):
     logging.basicConfig(
         filename=filename,
@@ -151,10 +148,6 @@ class Slave(threading.Thread):
                 logger.warning('Malformed response received!')
                 self.restart()
                 return
-            except BannedAccount:
-                self.error_code = 'BANNED?'
-                self.restart(30, 90)
-                return
             except Exception:
                 logger.exception('A wild exception appeared!')
                 self.error_code = 'EXCEPTION'
@@ -208,8 +201,8 @@ class Slave(threading.Thread):
                 self.banned_count += 1 #shutdown if keep get TypeError
                 continue
             if response_dict['status_code'] == 3:
-                logger.warning('Account banned')
-                raise BannedAccount
+                logger.warning('Account is possibly banned')
+                self.banned_count +=1
             map_objects = response_dict['responses'].get('GET_MAP_OBJECTS', {})
             pokemons = []
             forts = []
