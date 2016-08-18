@@ -339,7 +339,6 @@ class Slave(threading.Thread):
         self.error_code = 'SHUTDOWN'
         self.active = False
 
-
 def get_status_message(workers, count, start_time, points_stats):
     messages = [workers[i].status.ljust(20) for i in range(count)]
     running_for = datetime.now() - start_time
