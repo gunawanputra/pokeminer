@@ -148,6 +148,10 @@ class Slave(threading.Thread):
                 logger.warning('Malformed response received!')
                 self.restart()
                 return
+            except pgoapi_exceptions.NotLoggedInException:
+                logger.warning('Worker not logged in')
+                self.restart()
+                return
             except Exception:
                 logger.exception('A wild exception appeared!')
                 self.error_code = 'EXCEPTION'
@@ -193,12 +197,12 @@ class Slave(threading.Thread):
                 longitude=pgoapi_utils.f2i(point[1]),
                 cell_id=cell_ids
             )
-            #use try-except block with TypeError to find if response is None or str then simply continue to next point
+            #response_dict
+            #use try-except block with TypeError to find if response is None then simply continue to next point
             try:
                 map_objects = response_dict['responses'].get('GET_MAP_OBJECTS', {})
             except TypeError as e:
                 logger.exception(e)
-                self.banned_count += 1 #shutdown if keep get TypeError
                 continue
             if response_dict['status_code'] == 3:
                 logger.warning('Account is possibly banned')
