@@ -174,6 +174,7 @@ class Slave(threading.Thread):
             else:
                 self.error_code = 'RESTART'
                 self.restart()
+                return
         logger.info('Outside cycle while loop, thread shutdown')
         return
 
@@ -197,7 +198,6 @@ class Slave(threading.Thread):
                 longitude=pgoapi_utils.f2i(point[1]),
                 cell_id=cell_ids
             )
-            #response_dict
             #use try-except block with TypeError to find if response is None then simply continue to next point
             try:
                 map_objects = response_dict['responses'].get('GET_MAP_OBJECTS', {})
