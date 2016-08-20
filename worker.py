@@ -36,7 +36,6 @@ for setting_name in REQUIRED_SETTINGS:
     if not hasattr(config, setting_name):
         raise RuntimeError('Please set "{}" in config'.format(setting_name))
 
-
 workers = {}
 local_data = threading.local()
 
@@ -54,7 +53,6 @@ def configure_logger(filename='worker.log'):
         style='%',
         level=logging.INFO,
     )
-
 logger = logging.getLogger()
 
 
@@ -90,17 +88,17 @@ class Slave(threading.Thread):
         self.api.set_position(center[0], center[1], 100)  # lat, lon, alt
         if hasattr(config, 'PROXIES') and config.PROXIES:
             self.api.set_proxy(config.PROXIES)
+            logger.info('proxy used : %s', config.PROXIES)  
+
 
     def run(self):
         """Wrapper for self.main - runs it a few times before restarting
 
         Also is capable of restarting in case an error occurs.
         """
-        self.cycle = 1
-        self.error_code = None
 
+        self.error_code = None
         username, password, service = utils.get_worker_account(self.worker_no)
-        service = config.ACCOUNTS[self.worker_no][2]
         while True:
             try:
                 loginsuccess = self.api.login(
@@ -152,6 +150,10 @@ class Slave(threading.Thread):
                 logger.warning('Worker not logged in')
                 self.restart()
                 return
+            except pgoapi_exceptions.ServerSideRequestThrottlingException:
+                logger.info('Server throttling - sleeping for a bit (worker)')
+                time.sleep(random.uniform(1, 5))
+                continue
             except Exception:
                 logger.exception('A wild exception appeared!')
                 self.error_code = 'EXCEPTION'
@@ -167,6 +169,8 @@ class Slave(threading.Thread):
                 logger.info('Going to sleep for a bit')
                 self.error_code = 'SLEEP'
                 self.running = False
+                self.step = 0
+                self.seen_per_cycle = 0
                 time.sleep(random.randint(30, 60))
                 logger.info('AWAKEN MY MASTERS')
                 self.running = True
@@ -207,6 +211,7 @@ class Slave(threading.Thread):
             if response_dict['status_code'] == 3:
                 logger.warning('Account is possibly banned')
                 self.banned_count +=1
+                continue
             map_objects = response_dict['responses'].get('GET_MAP_OBJECTS', {})
             pokemons = []
             forts = []
