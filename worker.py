@@ -82,6 +82,7 @@ class Slave(threading.Thread):
         self.error_code = None
         self.running = True
         self.active = True
+        self.permaban = False
         center = self.points[0]
         self.api = PGoApi()
         self.api.activate_signature(config.ENCRYPT_PATH)
@@ -105,15 +106,16 @@ class Slave(threading.Thread):
                     username=username,
                     password=password,
                     provider=service,
-                    app_simulation=False
+                    app_simulation=True
                 )
                 if not loginsuccess:
                     self.error_code = 'LOGIN FAIL'
+                    time.sleep(10)
                     self.restart()
                     return
             except pgoapi_exceptions.AuthException:
                 logger.warning('Login failed!')
-                self.error_code = 'LOGIN FAIL'
+                self.error_code = 'LOGIN FAIL!'
                 self.restart()
                 return
             except pgoapi_exceptions.NotLoggedInException:
@@ -179,7 +181,7 @@ class Slave(threading.Thread):
                 self.error_code = 'RESTART'
                 self.restart()
                 return
-        logger.info('Outside cycle while loop, thread shutdown')
+        logger.info('Outside cycle while loop, thread terminate')
         return
 
 
@@ -202,7 +204,6 @@ class Slave(threading.Thread):
                 longitude=pgoapi_utils.f2i(point[1]),
                 cell_id=cell_ids
             )
-            #use try-except block with TypeError to find if response is None then simply continue to next point
             try:
                 map_objects = response_dict['responses'].get('GET_MAP_OBJECTS', {})
             except TypeError as e:
@@ -210,6 +211,7 @@ class Slave(threading.Thread):
                 continue
             if response_dict['status_code'] == 3:
                 logger.warning('Account is possibly banned')
+                if not self.permaban: self.permaban = True
                 self.banned_count +=1
                 continue
             map_objects = response_dict['responses'].get('GET_MAP_OBJECTS', {})
@@ -254,12 +256,16 @@ class Slave(threading.Thread):
                 len(forts),
             )
 			
+            if self.permaban: self.permaban = False
+            
 			#banned posibility count
+            object_seen = len(forts) + len(pokemons)  
             if self.banned_count >= 0:
-                if len(forts) == 0:
+                if object_seen == 0:
                     self.banned_count += 1
                     logger.info('banned_count : %d', self.banned_count)  
-                else: self.banned_count -= 1
+                else: self.banned_count = 0
+              
 			
             # Clear error code and let know that there are Pokemon
             if self.error_code and self.seen_per_cycle:
@@ -334,11 +340,15 @@ class Slave(threading.Thread):
     def disable(self):
         """Marks worker as disabled"""
         self.error_code = 'DISABLED'
-        self.active = False
+    #    self.active = False
 		
     def shutdown(self):
         """Marks worker as shutdown"""
-        self.error_code = 'SHUTDOWN'
+        
+        if self.permaban:
+            self.error_code = 'PERMANENT BAN'
+        else : 
+            self.error_code = 'IP BAN'
         self.active = False
 
 def get_status_message(workers, count, start_time, points_stats):
@@ -396,6 +406,7 @@ def spawn_workers(workers, status_bar=True):
     }
     last_cleaned_cache = time.time()
     last_workers_checked = time.time()
+    last_proxy_checked = time.time()
     workers_check = [
         (worker, worker.total_seen) for worker in workers.values()
         if worker.running
@@ -406,6 +417,10 @@ def spawn_workers(workers, status_bar=True):
         if now - last_cleaned_cache > (15 * 60):  # clean cache
             db.SIGHTING_CACHE.clean_expired()
             last_cleaned_cache = now
+        #Proxy check
+        if now - last_proxy_checked > (30 * 60):
+            logger.info('Checking proxy!')
+           
         # Check up on workers
         if now - last_workers_checked > (3 * 60):
             # Kill those not doing anything or shutdown if get banned
