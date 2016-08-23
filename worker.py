@@ -94,7 +94,6 @@ class Slave(threading.Thread):
 
     def run(self):
         """Wrapper for self.main - runs it a few times before restarting
-
         Also is capable of restarting in case an error occurs.
         """
 
@@ -110,12 +109,11 @@ class Slave(threading.Thread):
                 )
                 if not loginsuccess:
                     self.error_code = 'LOGIN FAIL'
-                    time.sleep(10)
                     self.restart()
                     return
             except pgoapi_exceptions.AuthException:
                 logger.warning('Login failed!')
-                self.error_code = 'LOGIN FAIL!'
+                self.error_code = 'LOGIN FAIL'
                 self.restart()
                 return
             except pgoapi_exceptions.NotLoggedInException:
@@ -166,19 +164,21 @@ class Slave(threading.Thread):
                 return
             if not self.active:
                 return
+                
             self.cycle += 1
+            self.step = 0
+            self.seen_per_cycle = 0
             if self.cycle <= config.CYCLES_PER_WORKER:
                 logger.info('Going to sleep for a bit')
                 self.error_code = 'SLEEP'
                 self.running = False
-                self.step = 0
-                self.seen_per_cycle = 0
                 time.sleep(random.randint(30, 60))
                 logger.info('AWAKEN MY MASTERS')
                 self.running = True
                 self.error_code = None
             else:
                 self.error_code = 'RESTART'
+                self.cycle = 1
                 self.restart()
                 return
         logger.info('Outside cycle while loop, thread terminate')
@@ -214,7 +214,7 @@ class Slave(threading.Thread):
                 if not self.permaban: self.permaban = True
                 self.banned_count +=1
                 continue
-            map_objects = response_dict['responses'].get('GET_MAP_OBJECTS', {})
+
             pokemons = []
             forts = []
             if map_objects.get('status') == 1:
@@ -320,18 +320,12 @@ class Slave(threading.Thread):
 
     def restart(self, sleep_min=5, sleep_max=20):
         """Sleeps for a bit, then restarts"""
-		
-        if self.error_code == 'RESTART':
-            self.cycle = 1
-            self.step = 0
-            self.seen_per_cycle = 0
-			
+        
         time.sleep(random.randint(sleep_min, sleep_max))
         start_worker(self.worker_no, self.points, self.step, self.cycle, self.seen_per_cycle)
 
     def kill(self):
         """Marks worker as not running
-
         It should stop any operation as soon as possible and restart itself.
         """
         self.error_code = 'KILLED'
@@ -339,8 +333,9 @@ class Slave(threading.Thread):
         
     def disable(self):
         """Marks worker as disabled"""
+        
         self.error_code = 'DISABLED'
-    #    self.active = False
+        self.active = False
 		
     def shutdown(self):
         """Marks worker as shutdown"""
@@ -416,11 +411,7 @@ def spawn_workers(workers, status_bar=True):
         # Clean cache
         if now - last_cleaned_cache > (15 * 60):  # clean cache
             db.SIGHTING_CACHE.clean_expired()
-            last_cleaned_cache = now
-        #Proxy check
-        if now - last_proxy_checked > (30 * 60):
-            logger.info('Checking proxy!')
-           
+            last_cleaned_cache = now        
         # Check up on workers
         if now - last_workers_checked > (3 * 60):
             # Kill those not doing anything or shutdown if get banned
